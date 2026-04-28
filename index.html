@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>808 DRUM PAD</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #222222;
+    --text: #f0f0f0;
+    --dim: #555;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  h1 {
+    font-size: clamp(48px, 10vw, 96px);
+    font-weight: 700;
+    font-family: monospace;
+    letter-spacing: 0.08em;
+    background: linear-gradient(135deg, #ff3c3c, #ff9500, #ffe600, #00e5ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 36px;
+  }
+
+
+
+  .pad-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    width: 100%;
+    max-width: 560px;
+  }
+
+  .pad {
+    aspect-ratio: 1;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.07s, border-color 0.07s, box-shadow 0.07s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .pad::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--pad-color);
+    opacity: 0;
+    transition: opacity 0.06s;
+  }
+
+  .pad.active::before { opacity: 0.22; }
+  .pad.active {
+    transform: scale(0.92);
+    border-color: var(--pad-color);
+    box-shadow: 0 0 18px var(--pad-color);
+  }
+
+  .ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--pad-color);
+    opacity: 0.5;
+    transform: scale(0);
+    animation: ripple 0.5s ease-out forwards;
+    pointer-events: none;
+  }
+  @keyframes ripple {
+    to { transform: scale(5); opacity: 0; }
+  }
+
+  .pad-label {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: monospace;
+    letter-spacing: 0.05em;
+    color: var(--pad-color);
+    position: relative;
+    z-index: 1;
+  }
+
+
+
+
+</style>
+</head>
+<body>
+
+<h1>808</h1>
+
+
+<div class="pad-grid" id="padGrid"></div>
+
+
+
+<script>
+const pads = [
+  { name: 'KICK',  key: 'Q', color: '#ff3c3c' },
+  { name: 'SNARE', key: 'W', color: '#ff9500' },
+  { name: 'CLAP',  key: 'E', color: '#ffe600' },
+  { name: 'TOM H', key: 'R', color: '#00e5ff' },
+  { name: 'TOM L', key: 'A', color: '#a855f7' },
+  { name: 'HH CL', key: 'S', color: '#00ff88' },
+  { name: 'HH OP', key: 'D', color: '#ff6ec7' },
+  { name: 'RIDE',  key: 'F', color: '#ffa0a0' },
+];
+
+let synths = [];
+const masterVol = new Tone.Volume(-3).toDestination();
+let audioStarted = false;
+
+async function ensureAudio() {
+  if (audioStarted) return;
+  await Tone.start();
+  Tone.getTransport().bpm.value = 120;
+  makeSynths();
+  audioStarted = true;
+}
+
+function makeSynths() {
+  synths.forEach(s => { try { s.dispose(); } catch(e){} });
+
+  // KICK — deep membrane synth
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.08, octaves: 8,
+    envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.1 }
+  }).connect(masterVol);
+
+  // SNARE — white noise burst
+  const snare = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.05 }
+  }).connect(masterVol);
+
+  // CLAP — pink noise, slightly slower attack
+  const clap = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.005, decay: 0.12, sustain: 0, release: 0.05 }
+  }).connect(masterVol);
+
+  // TOM HI — membrane, higher pitch
+  const tomH = new Tone.MembraneSynth({
+    pitchDecay: 0.05, octaves: 4,
+    envelope: { attack: 0.001, decay: 0.22, sustain: 0, release: 0.05 }
+  }).connect(masterVol);
+
+  // TOM LOW — membrane, lower pitch
+  const tomL = new Tone.MembraneSynth({
+    pitchDecay: 0.07, octaves: 5,
+    envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.08 }
+  }).connect(masterVol);
+
+  // HH CLOSED — metal synth, short decay
+  const hhCl = new Tone.MetalSynth({
+    frequency: 400, harmonicity: 5.1, modulationIndex: 32,
+    resonance: 4000, octaves: 1.5,
+    envelope: { attack: 0.001, decay: 0.05, release: 0.01 }
+  }).connect(masterVol);
+
+  // HH OPEN — metal synth, longer decay
+  const hhOp = new Tone.MetalSynth({
+    frequency: 400, harmonicity: 5.1, modulationIndex: 32,
+    resonance: 4000, octaves: 1.5,
+    envelope: { attack: 0.001, decay: 0.45, release: 0.1 }
+  }).connect(masterVol);
+
+  // RIDE — metal synth, long sustain
+  const ride = new Tone.MetalSynth({
+    frequency: 250, harmonicity: 8.1, modulationIndex: 16,
+    resonance: 5000, octaves: 1.2,
+    envelope: { attack: 0.001, decay: 0.8, release: 0.2 }
+  }).connect(masterVol);
+
+  synths = [kick, snare, clap, tomH, tomL, hhCl, hhOp, ride];
+}
+
+function triggerPad(i) {
+  const s = synths[i];
+  if (!s) return;
+  switch(i) {
+    case 0: s.triggerAttackRelease('C1', '8n'); break;
+    case 1: s.triggerAttackRelease('8n'); break;
+    case 2: s.triggerAttackRelease('8n'); break;
+    case 3: s.triggerAttackRelease('G2', '8n'); break;
+    case 4: s.triggerAttackRelease('D2', '8n'); break;
+    case 5: s.triggerAttackRelease('8n'); break;
+    case 6: s.triggerAttackRelease('8n'); break;
+    case 7: s.triggerAttackRelease('8n'); break;
+  }
+}
+
+// Build pads
+const padGrid = document.getElementById('padGrid');
+const padEls = [];
+
+pads.forEach((pad, i) => {
+  const el = document.createElement('div');
+  el.className = 'pad';
+  el.style.setProperty('--pad-color', pad.color);
+  el.innerHTML = `<span class="pad-label">${pad.name}</span>`;
+  el.addEventListener('pointerdown', async e => {
+    e.preventDefault();
+    await ensureAudio();
+    triggerPad(i);
+    flashPad(el);
+  });
+  padGrid.appendChild(el);
+  padEls.push(el);
+});
+
+function flashPad(el) {
+  el.classList.add('active');
+  const r = document.createElement('div');
+  r.className = 'ripple';
+  r.style.cssText = 'width:40px;height:40px;left:50%;top:50%;margin-left:-20px;margin-top:-20px;';
+  el.appendChild(r);
+  setTimeout(() => { el.classList.remove('active'); r.remove(); }, 350);
+}
+
+// Keyboard
+const keyMap = {};
+pads.forEach((p, i) => keyMap[p.key] = i);
+document.addEventListener('keydown', async e => {
+  if (e.repeat) return;
+  const i = keyMap[e.key.toUpperCase()];
+  if (i !== undefined) {
+    await ensureAudio();
+    triggerPad(i);
+    flashPad(padEls[i]);
+  }
+});
+
+
+</script>
+</body>
+</html>
