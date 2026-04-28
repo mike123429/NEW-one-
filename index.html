@@ -271,13 +271,6 @@ function makeSynths() {
     envelope: { attack: 0.001, decay: 0.05, release: 0.01 }
   }).connect(masterVol);
 
-  // HH OPEN — metal synth, long decay
-  const hhOp = new Tone.MetalSynth({
-    frequency: 400, harmonicity: 5.1, modulationIndex: 32,
-    resonance: 4000, octaves: 1.5,
-    envelope: { attack: 0.001, decay: 0.45, release: 0.1 }
-  }).connect(masterVol);
-
   // RIDE — metal synth, long sustain
   const ride = new Tone.MetalSynth({
     frequency: 250, harmonicity: 8.1, modulationIndex: 16,
@@ -292,26 +285,7 @@ function makeSynths() {
     envelope: { attack: 0.001, decay: 1.5, release: 0.5 }
   }).connect(masterVol);
 
-  // COWBELL — high metal synth
-  const cowbell = new Tone.MetalSynth({
-    frequency: 560, harmonicity: 5.1, modulationIndex: 8,
-    resonance: 3000, octaves: 0.5,
-    envelope: { attack: 0.001, decay: 0.6, release: 0.1 }
-  }).connect(masterVol);
-
-  // RIMSHOT — square wave click
-  const rim = new Tone.Synth({
-    oscillator: { type: 'square' },
-    envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.02 }
-  }).connect(masterVol);
-
-  // CLAVE — triangle wave click
-  const clave = new Tone.Synth({
-    oscillator: { type: 'triangle' },
-    envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.02 }
-  }).connect(masterVol);
-
-  synths = [kick, snare, clap, tomH, tomL, hhCl, hhOp, ride, crash, cowbell, rim, clave];
+  synths = [kick, snare, clap, tomH, tomL, hhCl, ride, crash];
 }
 
 // Trigger each synth with appropriate note/duration
