@@ -1,0 +1,272 @@
+<!-- tells the browser this is an HTML5 document -->
+<!DOCTYPE html>
+
+<!-- lang="en" tells the browser the page is in English -->
+<html lang="en">
+<head>
+
+  <!-- sets the character encoding so special characters display correctly -->
+  <meta charset="UTF-8">
+
+  <!-- the text that appears on the browser tab -->
+  <title>808 DRUM PAD</title>
+
+  <!-- loads the Tone.js audio library from a CDN (content delivery network).
+       must come before our own script so Tone is available when we use it. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+<style>
+  /* ── BODY ───────────────────────────────────────────────────
+     styles the entire page */
+  body {
+    background: #0a0a0a;      /* near-black background */
+    color: #f0f0f0;            /* off-white default text color */
+    font-family: monospace;    /* use the browser's built-in monospace font */
+    display: flex;             /* use flexbox to arrange child elements */
+    flex-direction: column;    /* stack children vertically */
+    align-items: center;       /* center children horizontally */
+    justify-content: center;   /* center children vertically */
+    min-height: 100vh;         /* make the body at least the full screen height */
+    margin: 0;                 /* remove default browser margin around the page */
+  }
+
+  /* ── TITLE ──────────────────────────────────────────────────
+     the big "808" heading */
+  h1 {
+    font-size: 72px;           /* large text */
+    letter-spacing: 0.1em;    /* space out the letters slightly */
+    margin-bottom: 24px;       /* gap between the title and the pad grid below */
+  }
+
+  /* ── PAD GRID ───────────────────────────────────────────────
+     the container that holds all 8 pads in a 4-column layout */
+  #grid {
+    display: grid;                          /* use CSS grid layout */
+    grid-template-columns: repeat(4, 140px); /* 4 columns, each 140px wide */
+    gap: 12px;                              /* 12px space between each pad */
+  }
+
+  /* ── INDIVIDUAL PAD ─────────────────────────────────────────
+     styles applied to every pad div */
+  .pad {
+    height: 140px;             /* square pad — 140px tall to match 140px wide columns */
+    background: #111;          /* dark grey background */
+    border: 2px solid #333;    /* slightly lighter grey border */
+    border-radius: 8px;        /* rounded corners */
+    cursor: pointer;           /* show a hand cursor on hover to indicate it's clickable */
+    display: flex;             /* flexbox to center the label text inside */
+    align-items: center;       /* center text vertically */
+    justify-content: center;   /* center text horizontally */
+    font-size: 16px;           /* text size for the drum name */
+    font-weight: bold;         /* bold text */
+    font-family: monospace;    /* match the body font */
+    color: inherit;            /* inherit color from parent — overridden per pad in JS */
+    transition: transform 0.07s; /* smooth animation when the pad scales down on press */
+  }
+
+  /* ── PAD PRESS EFFECT ───────────────────────────────────────
+     shrinks the pad slightly when physically clicked/tapped */
+  .pad:active {
+    transform: scale(0.92);   /* scale to 92% of original size on press */
+  }
+
+  /* ── VOL LABEL ──────────────────────────────────────────────
+     the small "VOL" text above the slider */
+  label {
+    margin-top: 20px;          /* space above the label */
+    font-size: 12px;           /* small text */
+    color: #555;               /* dim grey — less important than main content */
+    letter-spacing: 0.2em;     /* spaced out letters */
+  }
+
+  /* ── VOLUME SLIDER ──────────────────────────────────────────
+     the range input that controls master volume */
+  input[type=range] {
+    width: 160px;              /* slider width */
+    margin-top: 8px;           /* gap between "VOL" label and slider */
+  }
+</style>
+</head>
+<body>
+
+<!-- the big title at the top of the page -->
+<h1>808</h1>
+
+<!-- empty container — JavaScript will fill this with 8 pad divs -->
+<div id="grid"></div>
+
+<!-- "VOL" label linked to the input below it -->
+<label>VOL</label>
+
+<!-- volume slider: min=0 (silent), max=1 (full), starts at 0.8 -->
+<input type="range" id="vol" min="0" max="1" step="0.01" value="0.8">
+
+<script>
+// ── PAD DATA ──────────────────────────────────────────────────
+// Each pad has a display name, a keyboard shortcut key, and a color.
+// The 8 pads are arranged in 2 rows of 4: Q W E R on top, A S D F on bottom.
+const pads = [
+  { name: 'KICK',  key: 'Q', color: '#ff3c3c' }, // row 1
+  { name: 'SNARE', key: 'W', color: '#ff9500' },
+  { name: 'CLAP',  key: 'E', color: '#ffe600' },
+  { name: 'TOM H', key: 'R', color: '#00e5ff' },
+  { name: 'TOM L', key: 'A', color: '#a855f7' }, // row 2
+  { name: 'HH CL', key: 'S', color: '#00ff88' },
+  { name: 'HH OP', key: 'D', color: '#ff6ec7' },
+  { name: 'RIDE',  key: 'F', color: '#ffa0a0' },
+];
+
+// ── MASTER VOLUME ─────────────────────────────────────────────
+// Tone.Volume is a gain node. -3 means -3 decibels (slightly below full).
+// .toDestination() connects it to the speakers.
+// All synths will route through this so one slider controls everything.
+const vol = new Tone.Volume(-3).toDestination();
+
+// ── AUDIO STATE ───────────────────────────────────────────────
+// Browsers block audio until the user interacts with the page.
+// We use a flag so we only call Tone.start() once on the first tap/keypress.
+let synths = [];
+let started = false;
+
+async function start() {
+  if (started) return; // don't run twice
+  await Tone.start();  // unlocks audio in the browser
+  started = true;
+
+  // ── BUILD SYNTHS ─────────────────────────────────────────────
+  // Each synth is created with Tone.js and connected to the master volume.
+  // MembraneSynth = pitched drum (good for kick and toms)
+  // NoiseSynth = unpitched noise burst (good for snare and clap)
+  // MetalSynth = metallic noise (good for hi-hats and ride)
+  // The envelope controls how the sound behaves over time:
+  //   attack  = how fast it rises
+  //   decay   = how fast it falls after the peak
+  //   sustain = level it holds at (0 = no sustain, drops to silence)
+  //   release = how fast it fades after note ends
+  synths = [
+
+    // KICK — deep bass drum. Low pitch (C1), long pitchDecay slides it down fast.
+    // octaves: 8 means the pitch starts 8 octaves above C1 and slides down quickly.
+    new Tone.MembraneSynth({
+      pitchDecay: 0.08, octaves: 8,
+      envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.1 }
+    }).connect(vol),
+
+    // SNARE — white noise with a short sharp envelope. Classic snare sound.
+    new Tone.NoiseSynth({
+      noise: { type: 'white' },
+      envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.05 }
+    }).connect(vol),
+
+    // CLAP — pink noise (softer than white). Slightly slower attack = softer transient.
+    new Tone.NoiseSynth({
+      noise: { type: 'pink' },
+      envelope: { attack: 0.005, decay: 0.12, sustain: 0, release: 0.05 }
+    }).connect(vol),
+
+    // TOM HI — higher pitched tom. Fewer octaves = less pitch drop = higher sound.
+    new Tone.MembraneSynth({
+      pitchDecay: 0.05, octaves: 4,
+      envelope: { attack: 0.001, decay: 0.22, sustain: 0, release: 0.05 }
+    }).connect(vol),
+
+    // TOM LOW — lower pitched tom. More octaves and longer decay = deeper sound.
+    new Tone.MembraneSynth({
+      pitchDecay: 0.07, octaves: 5,
+      envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.08 }
+    }).connect(vol),
+
+    // HH CLOSED — very short decay (0.05) makes it a tight closed hi-hat tick.
+    new Tone.MetalSynth({
+      frequency: 400, harmonicity: 5.1, modulationIndex: 32,
+      resonance: 4000, octaves: 1.5,
+      envelope: { attack: 0.001, decay: 0.05, release: 0.01 }
+    }).connect(vol),
+
+    // HH OPEN — same synth settings but longer decay (0.45) = open hi-hat.
+    new Tone.MetalSynth({
+      frequency: 400, harmonicity: 5.1, modulationIndex: 32,
+      resonance: 4000, octaves: 1.5,
+      envelope: { attack: 0.001, decay: 0.45, release: 0.1 }
+    }).connect(vol),
+
+    // RIDE — lower frequency and very long decay = ride cymbal shimmer.
+    new Tone.MetalSynth({
+      frequency: 250, harmonicity: 8.1, modulationIndex: 16,
+      resonance: 5000, octaves: 1.2,
+      envelope: { attack: 0.001, decay: 0.8, release: 0.2 }
+    }).connect(vol),
+
+  ];
+}
+
+// ── TRIGGER A SYNTH ───────────────────────────────────────────
+// MembraneSynth needs a musical note (e.g. 'C1') to set its base pitch.
+// NoiseSynth and MetalSynth are unpitched so they just need a duration.
+// '8n' = eighth note duration at the current BPM (120).
+// null in the notes array means that synth doesn't need a pitch.
+const notes = ['C1', null, null, 'G2', 'D2', null, null, null];
+
+function trigger(i) {
+  const s = synths[i];
+  if (!s) return; // synths not built yet — do nothing
+  // if this pad has a note, pass it; otherwise just trigger with duration only
+  notes[i] ? s.triggerAttackRelease(notes[i], '8n') : s.triggerAttackRelease('8n');
+}
+
+// ── BUILD PAD ELEMENTS ────────────────────────────────────────
+// We create a div for each pad dynamically using JavaScript
+// instead of writing 8 divs by hand in the HTML.
+const grid = document.getElementById('grid');
+const els = []; // store references to each pad div so keyboard can flash them
+
+pads.forEach((p, i) => {
+  const div = document.createElement('div'); // create a new div element
+  div.className = 'pad';                      // give it the pad CSS class
+  div.textContent = p.name;                   // label it with the drum name
+  div.style.color = p.color;                  // color the text with the pad color
+  div.style.borderColor = '#333';             // default dark border
+
+  // when the pad is pressed (mouse or touch)
+  div.addEventListener('pointerdown', async e => {
+    e.preventDefault();            // stop the browser doing anything else on touch
+    await start();                 // make sure audio is unlocked
+    trigger(i);                    // play the sound
+    // flash the pad — change border and background to the pad color briefly
+    div.style.borderColor = p.color;
+    div.style.background = p.color + '33'; // '33' at the end = 20% opacity in hex
+    // after 200ms, reset back to the default dark colors
+    setTimeout(() => { div.style.borderColor = '#333'; div.style.background = '#111'; }, 200);
+  });
+
+  grid.appendChild(div); // add the div to the grid on the page
+  els.push(div);          // save a reference so the keyboard handler can find it
+});
+
+// ── KEYBOARD SUPPORT ──────────────────────────────────────────
+// Build a lookup table: letter key -> pad index
+// e.g. keys['Q'] = 0 (kick), keys['W'] = 1 (snare), etc.
+const keys = {};
+pads.forEach((p, i) => keys[p.key] = i);
+
+document.addEventListener('keydown', async e => {
+  if (e.repeat) return; // ignore held keys — only fire once per press
+  const i = keys[e.key.toUpperCase()]; // look up which pad this key maps to
+  if (i !== undefined) {
+    await start();    // unlock audio if needed
+    trigger(i);       // play the sound
+    // fire a fake pointerdown on the pad div so it flashes too
+    els[i].dispatchEvent(new Event('pointerdown'));
+  }
+});
+
+// ── VOLUME SLIDER ─────────────────────────────────────────────
+// The slider outputs a value from 0 to 1.
+// Tone.gainToDb converts that to decibels (what the Volume node expects).
+// e.g. 0.5 on the slider = -6dB, 1.0 = 0dB, 0 = silence.
+document.getElementById('vol').addEventListener('input', e => {
+  vol.volume.value = Tone.gainToDb(+e.target.value);
+});
+</script>
+</body>
+</html>
